@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from datasets import load_dataset
@@ -29,7 +30,26 @@ class QueryExample:
 def _hf_token_arg() -> str | bool | None:
     if settings.hf_token:
         return settings.hf_token
-    return True
+    return None
+
+
+def _list_parquet_files(folder: Path) -> list[str]:
+    if not folder.exists() or not folder.is_dir():
+        return []
+    files = sorted(str(p) for p in folder.glob("*.parquet") if p.is_file())
+    return files
+
+
+def _load_local_parquet_dataset(folder: Path):
+    files = _list_parquet_files(folder)
+    if not files:
+        return None
+    ds = load_dataset(
+        "parquet",
+        data_files={"train": files},
+        cache_dir=str(settings.hf_cache_dir),
+    )
+    return ds["train"]
 
 
 def _guess_first_existing_key(row: dict[str, Any], candidates: list[str]) -> str | None:
@@ -73,22 +93,27 @@ def _row_to_text(row: dict[str, Any]) -> str:
 def load_tables() -> list[TableSchema]:
     settings.ensure_cache_dirs()
 
-    token = _hf_token_arg()
-    try:
-        ds = load_dataset(
-            "beaverbench/beaver-table",
-            token=token,
-            cache_dir=str(settings.hf_cache_dir),
-        )
-    except Exception as e:
-        raise RuntimeError(
-            "Failed to download/load beaverbench/beaver-table from Hugging Face. "
-            "Provide access via HF_TOKEN (env var) or run `huggingface-cli login`. "
-            f"Original error: {e}"
-        ) from e
+    local = _load_local_parquet_dataset(settings.local_table_dir)
+    if local is not None:
+        rows = local
+    else:
+        token = _hf_token_arg()
+        try:
+            ds = load_dataset(
+                "beaverbench/beaver-table",
+                token=token,
+                cache_dir=str(settings.hf_cache_dir),
+            )
+        except Exception as e:
+            raise RuntimeError(
+                "Failed to download/load beaverbench/beaver-table from Hugging Face. "
+                "Provide access via HF_TOKEN (env var) or run `huggingface-cli login`, "
+                "or set LOCAL_TABLE_DIR to a folder containing the downloaded *.parquet files. "
+                f"Original error: {e}"
+            ) from e
 
-    split_name = "train" if "train" in ds else list(ds.keys())[0]
-    rows = ds[split_name]
+        split_name = "train" if "train" in ds else list(ds.keys())[0]
+        rows = ds[split_name]
 
     tables: list[TableSchema] = []
     for row in rows:
@@ -129,22 +154,27 @@ def load_tables() -> list[TableSchema]:
 def load_queries(limit: int | None = None) -> list[QueryExample]:
     settings.ensure_cache_dirs()
 
-    token = _hf_token_arg()
-    try:
-        ds = load_dataset(
-            "beaverbench/beaver-query",
-            token=token,
-            cache_dir=str(settings.hf_cache_dir),
-        )
-    except Exception as e:
-        raise RuntimeError(
-            "Failed to download/load beaverbench/beaver-query from Hugging Face. "
-            "Provide access via HF_TOKEN (env var) or run `huggingface-cli login`. "
-            f"Original error: {e}"
-        ) from e
+    local = _load_local_parquet_dataset(settings.local_query_dir)
+    if local is not None:
+        rows = local
+    else:
+        token = _hf_token_arg()
+        try:
+            ds = load_dataset(
+                "beaverbench/beaver-query",
+                token=token,
+                cache_dir=str(settings.hf_cache_dir),
+            )
+        except Exception as e:
+            raise RuntimeError(
+                "Failed to download/load beaverbench/beaver-query from Hugging Face. "
+                "Provide access via HF_TOKEN (env var) or run `huggingface-cli login`, "
+                "or set LOCAL_QUERY_DIR to a folder containing the downloaded *.parquet files. "
+                f"Original error: {e}"
+            ) from e
 
-    split_name = "train" if "train" in ds else list(ds.keys())[0]
-    rows = ds[split_name]
+        split_name = "train" if "train" in ds else list(ds.keys())[0]
+        rows = ds[split_name]
 
     examples: list[QueryExample] = []
     for row in rows:

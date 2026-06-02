@@ -37,6 +37,18 @@ def _require_ready() -> None:
         raise HTTPException(status_code=503, detail="Service not ready")
 
 
+def _get_llm():
+    llm = getattr(app.state, "llm", None)
+    if llm is not None:
+        return llm
+    try:
+        llm = build_llm_client()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    app.state.llm = llm
+    return llm
+
+
 @app.on_event("startup")
 async def _startup() -> None:
     setup_logging()
@@ -48,13 +60,12 @@ async def _startup() -> None:
         init_default_db(tables)
 
         retriever = TableRetriever(tables)
-        llm = build_llm_client()
         few_shot: list[QueryExample] = load_queries(limit=5)
 
         app.state.tables = tables
         app.state.table_map = table_map
         app.state.retriever = retriever
-        app.state.llm = llm
+        app.state.llm = None
         app.state.examples = few_shot
         app.state.ready = True
         app.state.init_error = None
@@ -112,7 +123,7 @@ async def generate_sql(req: GenerateSqlRequest) -> GenerateSqlResponse:
     prompt = build_prompt(q, retrieved_tables, app.state.table_map, app.state.examples)
 
     start = time.perf_counter()
-    llm_res = await app.state.llm.generate(prompt)
+    llm_res = await _get_llm().generate(prompt)
     latency_ms = (time.perf_counter() - start) * 1000.0
 
     logger.info(
@@ -150,7 +161,7 @@ async def benchmark() -> BenchmarkResponse:
 
     result, samples = await run_benchmark(
         retriever=app.state.retriever,
-        llm=app.state.llm,
+        llm=_get_llm(),
         table_schemas=app.state.table_map,
         total=25,
     )
@@ -180,4 +191,3 @@ async def benchmark() -> BenchmarkResponse:
         error_analysis=error_analysis,
         samples=sample_payload,
     )
-

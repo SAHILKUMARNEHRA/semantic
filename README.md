@@ -10,9 +10,9 @@ FastAPI microservice that:
 ## Requirements
 
 - Python 3.11+
-- Hugging Face access to:
-  - `beaverbench/beaver-table`
-  - `beaverbench/beaver-query`
+- Beaver dataset files, either:
+  - Local folders containing the downloaded parquet files (recommended), or
+  - Hugging Face access to `beaverbench/beaver-table` and `beaverbench/beaver-query`
 
 ## Setup
 
@@ -24,7 +24,11 @@ pip install -r requirements.txt
 
 Set environment variables:
 
-- `HF_TOKEN` (required unless you already ran `huggingface-cli login`)
+- If using Hugging Face download:
+  - `HF_TOKEN` (required unless you already ran `huggingface-cli login`)
+- If using local files (your current setup):
+  - `LOCAL_TABLE_DIR=../table`
+  - `LOCAL_QUERY_DIR=../query`
 - One LLM key (free/paid):
   - `GROQ_API_KEY` (recommended default provider)
   - or `OPENROUTER_API_KEY`

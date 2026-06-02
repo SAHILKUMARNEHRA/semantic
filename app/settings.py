@@ -15,6 +15,9 @@ class Settings(BaseSettings):
 
     sqlite_path: Path = Field(default=Path(".cache/beaver.sqlite"))
 
+    local_table_dir: Path = Field(default=Path("../table"), alias="LOCAL_TABLE_DIR")
+    local_query_dir: Path = Field(default=Path("../query"), alias="LOCAL_QUERY_DIR")
+
     max_question_length: int = Field(default=512)
     retrieval_top_k: int = Field(default=10)
 
