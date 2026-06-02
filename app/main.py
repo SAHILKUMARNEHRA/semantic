@@ -123,7 +123,11 @@ async def generate_sql(req: GenerateSqlRequest) -> GenerateSqlResponse:
     prompt = build_prompt(q, retrieved_tables, app.state.table_map, app.state.examples)
 
     start = time.perf_counter()
-    llm_res = await _get_llm().generate(prompt)
+    try:
+        llm_res = await _get_llm().generate(prompt)
+    except Exception as e:
+        logger.exception("llm_failed", extra={"error": str(e)})
+        raise HTTPException(status_code=500, detail=str(e)) from e
     latency_ms = (time.perf_counter() - start) * 1000.0
 
     logger.info(
