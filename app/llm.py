@@ -88,7 +88,7 @@ class OpenAICompatibleClient(LlmClient):
         self._model = model
         self._extra_headers = extra_headers or {}
 
-    @retry(wait=wait_exponential(min=1, max=8), stop=stop_after_attempt(3))
+    @retry(wait=wait_exponential(min=1, max=8), stop=stop_after_attempt(3), reraise=True)
     async def _call(self, payload: dict[str, Any]) -> dict[str, Any]:
         headers = {
             "Authorization": f"Bearer {self._api_key}",
@@ -97,7 +97,11 @@ class OpenAICompatibleClient(LlmClient):
         }
         async with httpx.AsyncClient(timeout=settings.request_timeout_s) as client:
             resp = await client.post(f"{self._base_url}/chat/completions", headers=headers, json=payload)
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                body = (e.response.text or "").strip()
+                raise RuntimeError(f"LLM HTTP {e.response.status_code}: {body[:2000]}") from e
             return resp.json()
 
     async def generate(self, prompt: str) -> LlmResult:
@@ -124,11 +128,15 @@ class OllamaClient(LlmClient):
         self._base_url = base_url.rstrip("/")
         self._model = model
 
-    @retry(wait=wait_exponential(min=1, max=8), stop=stop_after_attempt(3))
+    @retry(wait=wait_exponential(min=1, max=8), stop=stop_after_attempt(3), reraise=True)
     async def _call(self, payload: dict[str, Any]) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=settings.request_timeout_s) as client:
             resp = await client.post(f"{self._base_url}/api/chat", json=payload)
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                body = (e.response.text or "").strip()
+                raise RuntimeError(f"Ollama HTTP {e.response.status_code}: {body[:2000]}") from e
             return resp.json()
 
     async def generate(self, prompt: str) -> LlmResult:
