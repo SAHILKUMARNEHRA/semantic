@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     llm_provider: Literal["groq", "openai", "openrouter", "together", "ollama", "none"] = Field(
         default="groq"
     )
-    llm_model: str = Field(default="llama-3.1-70b-versatile")
+    llm_model: str = Field(default="llama3-70b-8192", alias="LLM_MODEL")
 
     openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")

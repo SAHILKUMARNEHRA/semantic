@@ -38,7 +38,7 @@ Set environment variables:
 Optional:
 
 - `LLM_PROVIDER` = `groq` | `openrouter` | `together` | `openai` | `ollama`
-- `LLM_MODEL` (default: `llama-3.1-70b-versatile`)
+- `LLM_MODEL` (default: `llama3-70b-8192`)
 
 ## Run
 
