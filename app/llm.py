@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from dataclasses import dataclass
@@ -99,7 +100,7 @@ class OpenAICompatibleClient(LlmClient):
         self._model = model
         self._extra_headers = {k: _sanitize_header_value(v) for k, v in (extra_headers or {}).items()}
 
-    @retry(wait=wait_exponential(min=1, max=8), stop=stop_after_attempt(3), reraise=True)
+    @retry(wait=wait_exponential(min=1, max=30), stop=stop_after_attempt(5), reraise=True)
     async def _call(self, payload: dict[str, Any]) -> dict[str, Any]:
         headers = {
             "Authorization": f"Bearer {self._api_key}",
@@ -111,6 +112,24 @@ class OpenAICompatibleClient(LlmClient):
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    ra = (e.response.headers.get("retry-after") or "").strip()
+                    wait_s = 0.0
+                    if ra:
+                        try:
+                            wait_s = float(ra)
+                        except Exception:
+                            wait_s = 0.0
+                    if wait_s <= 0.0:
+                        body_text = (e.response.text or "")
+                        m = re.search(r"try again in ([0-9]+(?:\.[0-9]+)?)s", body_text, re.IGNORECASE)
+                        if m:
+                            try:
+                                wait_s = float(m.group(1))
+                            except Exception:
+                                wait_s = 0.0
+                    if wait_s > 0.0:
+                        await asyncio.sleep(min(wait_s + 0.2, 35.0))
                 body = (e.response.text or "").strip()
                 raise RuntimeError(f"LLM HTTP {e.response.status_code}: {body[:2000]}") from e
             return resp.json()

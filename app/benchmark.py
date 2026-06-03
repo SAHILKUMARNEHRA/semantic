@@ -74,8 +74,26 @@ async def run_benchmark(
                 recall10_hits += 1
 
         prompt = build_prompt(ex.question, retrieved_tables, table_schemas, few_shot)
-        llm_res = await llm.generate(prompt)
-        predicted_sql = llm_res.sql
+        try:
+            llm_res = await llm.generate(prompt)
+            predicted_sql = llm_res.sql
+        except Exception as e:
+            latency_ms = (time.perf_counter() - start) * 1000.0
+            latencies_ms.append(latency_ms)
+            execution_failures += 1
+            samples.append(
+                BenchmarkSample(
+                    question=ex.question,
+                    gold_sql=ex.sql,
+                    predicted_sql=f"ERROR: {str(e)[:500]}",
+                    retrieved_tables=retrieved_tables,
+                    gold_tables=gold_tables,
+                    is_parse_ok=False,
+                    is_exec_ok=False,
+                    exact_match=False,
+                )
+            )
+            break
 
         is_parse_ok, parse_err = validate_sql_syntax(predicted_sql)
         if is_parse_ok:
@@ -117,7 +135,7 @@ async def run_benchmark(
             )
         )
 
-    n = len(examples)
+    n = len(samples)
     metrics = {
         "retrieval_recall_at_5": (recall5_hits / n) if n else 0.0,
         "retrieval_recall_at_10": (recall10_hits / n) if n else 0.0,
