@@ -30,6 +30,17 @@ def extract_sql(text: str) -> str:
     return s.rstrip(";")
 
 
+def _sanitize_header_token(value: str) -> str:
+    return re.sub(r"\s+", "", (value or "").strip())
+
+
+def _sanitize_header_value(value: str) -> str:
+    v = (value or "").strip()
+    v = re.sub(r"[\u2028\u2029]+", " ", v)
+    v = re.sub(r"\s+", " ", v)
+    return v.strip()
+
+
 def build_prompt(
     question: str,
     retrieved_tables: list[str],
@@ -83,10 +94,10 @@ class LlmClient:
 
 class OpenAICompatibleClient(LlmClient):
     def __init__(self, base_url: str, api_key: str, model: str, extra_headers: dict[str, str] | None = None):
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
+        self._base_url = (base_url or "").strip().rstrip("/")
+        self._api_key = _sanitize_header_token(api_key)
         self._model = model
-        self._extra_headers = extra_headers or {}
+        self._extra_headers = {k: _sanitize_header_value(v) for k, v in (extra_headers or {}).items()}
 
     @retry(wait=wait_exponential(min=1, max=8), stop=stop_after_attempt(3), reraise=True)
     async def _call(self, payload: dict[str, Any]) -> dict[str, Any]:
