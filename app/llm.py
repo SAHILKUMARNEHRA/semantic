@@ -104,6 +104,40 @@ class OpenAICompatibleClient(LlmClient):
                 raise RuntimeError(f"LLM HTTP {e.response.status_code}: {body[:2000]}") from e
             return resp.json()
 
+    @retry(wait=wait_exponential(min=1, max=8), stop=stop_after_attempt(3), reraise=True)
+    async def _list_models(self) -> list[str]:
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+            **self._extra_headers,
+        }
+        async with httpx.AsyncClient(timeout=settings.request_timeout_s) as client:
+            resp = await client.get(f"{self._base_url}/models", headers=headers)
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                body = (e.response.text or "").strip()
+                raise RuntimeError(f"LLM models HTTP {e.response.status_code}: {body[:2000]}") from e
+            data = resp.json()
+            ids: list[str] = []
+            for item in data.get("data", []) or []:
+                mid = item.get("id")
+                if isinstance(mid, str) and mid.strip():
+                    ids.append(mid.strip())
+            return ids
+
+    def _pick_model(self, model_ids: list[str]) -> str | None:
+        if not model_ids:
+            return None
+        lowered = [(m, m.lower()) for m in model_ids]
+        for m, ml in lowered:
+            if "llama" in ml and "70" in ml:
+                return m
+        for m, ml in lowered:
+            if "llama" in ml:
+                return m
+        return model_ids[0]
+
     async def generate(self, prompt: str) -> LlmResult:
         payload = {
             "model": self._model,
@@ -113,7 +147,20 @@ class OpenAICompatibleClient(LlmClient):
             ],
             "temperature": 0.1,
         }
-        data = await self._call(payload)
+        try:
+            data = await self._call(payload)
+        except RuntimeError as e:
+            msg = str(e).lower()
+            if any(k in msg for k in ["model_decommissioned", "model_not_found", "does not exist", "no longer supported"]):
+                model_ids = await self._list_models()
+                picked = self._pick_model(model_ids)
+                if not picked:
+                    raise
+                self._model = picked
+                payload["model"] = picked
+                data = await self._call(payload)
+            else:
+                raise
         content = (
             data.get("choices", [{}])[0]
             .get("message", {})
@@ -151,12 +198,25 @@ class OllamaClient(LlmClient):
         return LlmResult(raw_text=content, sql=sql)
 
 
+def _normalize_groq_model(model: str) -> str:
+    m = (model or "").strip()
+    if not m:
+        return m
+    lowered = m.lower()
+    if lowered == "llama3-70b-8192":
+        return "llama-3.1-70b-versatile"
+    if lowered == "llama3-8b-8192":
+        return "llama-3.1-8b-instant"
+    return m
+
+
 def build_llm_client() -> LlmClient:
     provider = settings.llm_provider
 
     if provider == "groq":
         if settings.groq_api_key:
-            return OpenAICompatibleClient(settings.groq_base_url, settings.groq_api_key, settings.llm_model)
+            model = _normalize_groq_model(settings.groq_model or settings.llm_model)
+            return OpenAICompatibleClient(settings.groq_base_url, settings.groq_api_key, model)
 
     if provider == "openai":
         if settings.openai_api_key:

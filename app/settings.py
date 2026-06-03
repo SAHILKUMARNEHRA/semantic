@@ -24,13 +24,14 @@ class Settings(BaseSettings):
     llm_provider: Literal["groq", "openai", "openrouter", "together", "ollama", "none"] = Field(
         default="groq"
     )
-    llm_model: str = Field(default="llama3-70b-8192", alias="LLM_MODEL")
+    llm_model: str = Field(default="llama-3.1-70b-versatile", alias="LLM_MODEL")
 
     openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
 
     groq_base_url: str = Field(default="https://api.groq.com/openai/v1", alias="GROQ_BASE_URL")
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
+    groq_model: str | None = Field(default=None, alias="GROQ_MODEL")
 
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL")
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
