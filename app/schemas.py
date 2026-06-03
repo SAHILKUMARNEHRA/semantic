@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class RetrieveRequest(BaseModel):
-    question: str = Field(min_length=1)
+    question: str
 
 
 class TableDetail(BaseModel):
@@ -22,7 +22,7 @@ class RetrieveResponse(BaseModel):
 
 
 class GenerateSqlRequest(BaseModel):
-    question: str = Field(min_length=1)
+    question: str
     use_retrieved_context: bool = True
 
 
